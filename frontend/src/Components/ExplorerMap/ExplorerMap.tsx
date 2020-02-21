@@ -1,6 +1,6 @@
 import React, { useEffect, useState, ReactElement } from 'react'
 import { Map, Marker, Popup, TileLayer, Polyline } from 'react-leaflet'
-import { LatLng } from 'leaflet'
+import { LatLng, LeafletMouseEvent } from 'leaflet'
 
 import { useInterval } from 'utils/hooks'
 
@@ -47,8 +47,10 @@ type IsochroneResponse = {
   }[]
 }
 
+
+
 const ExplorerMap = (): ReactElement => {
-  const [latlngs, setLatlngs] = useState([[48.8, 2.3]])
+  const [targetPoints, setTargetPoint] = useState<null | number[]>(null)
   const [isochronePolylines, setIsochronePolylines] = useState<PolyLine[]>([])
   const [polylines, setPolylines] = useState<PolyLine[]>([])
   const [tips, setTips] = useState<TipMarker[]>([])
@@ -57,9 +59,20 @@ const ExplorerMap = (): ReactElement => {
   const [delay, setDelay] = useState<null | number>(100)
 
   const fetchSearchEdges = async () => {
-    const response = await fetch(
-      'http://localhost:8989/node_weight?point=48.886038,2.358665&time_limit=600&reverse_flow=true',
-    )
+    if (!targetPoints) {
+      return;
+    }
+    const url = new URL('http://localhost:8989/node_weight');
+    const params = {
+      'point': `${targetPoints[0]},${targetPoints[1]}`,
+      'time_limit': '600',
+      'reverse_flow': 'true'
+    }
+
+    url.search = new URLSearchParams(params).toString();
+    console.log(url.toJSON())
+    const response = await fetch(await url.toJSON())
+
     const edges: NodeEdge[] = await response.json()
     // setSearchBuffer(edges)
     // setSearchBufferIndex(0)
@@ -121,21 +134,16 @@ const ExplorerMap = (): ReactElement => {
 
   useEffect(() => {
     fetchSearchEdges()
-    fetchIsochrone()
+    // fetchIsochrone()
     // fetchTips()
-  }, [])
+  }, [targetPoints])
 
-  const addRandomPoint = () => {
-    const lastPoint = [
-      latlngs[latlngs.length - 1][0] + (Math.random() > 0.5 ? 0.01 : -0.01),
-      latlngs[latlngs.length - 1][1] + (Math.random() > 0.5 ? 0.01 : -0.01),
-    ]
-    setLatlngs([...latlngs, lastPoint])
+  const handleMapClick = (event: LeafletMouseEvent) => {
+    setTargetPoint([event.latlng.lat, event.latlng.lng])
   }
 
   // useInterval(addRandomPoint, 100);
   useInterval(drawFromBuffer, delay)
-  console.log(isochronePolylines)
 
   return (
     <div className="map">
@@ -143,7 +151,7 @@ const ExplorerMap = (): ReactElement => {
         <button onClick={() => setDelay(null)}>Pause</button>
         <button onClick={() => setDelay(100)}>Play</button>
       </div>
-      <Map center={[48.886038, 2.358665]} zoom={14}>
+      <Map center={[48.886038, 2.358665]} zoom={14} onClick={handleMapClick}>
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
