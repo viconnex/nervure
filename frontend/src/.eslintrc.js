@@ -12,23 +12,15 @@ module.exports = {
     sourceType: "module" // Allows for the use of imports
   },
   rules: {
-    "prettier/prettier": [
-      "error",
-      {
-        singleQuote: true,
-        semi: false,
-        trailingComma: "all",
-        printWidth: 100,
-        tabWidth: 2
-      }
-    ]
+    "prettier/prettier": "error",
+    "@typescript-eslint/ban-ts-ignore": "off"
   },
   overrides: [
     {
       files: ["*-test.js", "*.spec.ts"],
       rules: {
-        "@typescript-eslint/explicit-function-return-type": "off"
+        "@typescript-eslint/explicit-function-return-type": "off",
       }
-    }
+    },
   ]
 };

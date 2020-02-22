@@ -35,7 +35,7 @@ const getPolylineFromNodeEdge = (node: NodeEdge, id: number): PolyLine => {
   return {
     id,
     edges: [from, to],
-    weight: node.weight
+    weight: node.weight,
   }
 }
 
@@ -47,8 +47,6 @@ type IsochroneResponse = {
   }[]
 }
 
-
-
 const ExplorerMap = (): ReactElement => {
   const [targetPoints, setTargetPoint] = useState<null | number[]>(null)
   const [isochronePolylines, setIsochronePolylines] = useState<PolyLine[]>([])
@@ -57,27 +55,6 @@ const ExplorerMap = (): ReactElement => {
   const [searchBuffer, setSearchBuffer] = useState<NodeEdge[]>([])
   const [searchBufferIndex, setSearchBufferIndex] = useState<null | number>(null)
   const [delay, setDelay] = useState<null | number>(100)
-
-  const fetchSearchEdges = async () => {
-    if (!targetPoints) {
-      return;
-    }
-    const url = new URL('http://localhost:8989/node_weight');
-    const params = {
-      'point': `${targetPoints[0]},${targetPoints[1]}`,
-      'time_limit': '600',
-      'reverse_flow': 'true'
-    }
-
-    url.search = new URLSearchParams(params).toString();
-    console.log(url.toJSON())
-    const response = await fetch(await url.toJSON())
-
-    const edges: NodeEdge[] = await response.json()
-    // setSearchBuffer(edges)
-    // setSearchBufferIndex(0)
-    setPolylines(edges.map(getPolylineFromNodeEdge))
-  }
 
   const fetchTips = async () => {
     const response = await fetch(
@@ -133,12 +110,35 @@ const ExplorerMap = (): ReactElement => {
   }
 
   useEffect(() => {
+    const fetchSearchEdges = async (): Promise<void> => {
+      if (!targetPoints) {
+        return
+      }
+      const url = new URL('http://localhost:8989/node_weight')
+      const params = {
+        point: `${targetPoints[0]},${targetPoints[1]}`,
+        // eslint-disable-next-line
+        time_limit: '600',
+        // eslint-disable-next-line
+        reverse_flow: 'false',
+        vehicle: 'bike',
+      }
+
+      url.search = new URLSearchParams(params).toString()
+      const response = await fetch(await url.toJSON())
+      try {
+        const edges: NodeEdge[] = await response.json()
+        setPolylines(edges.map(getPolylineFromNodeEdge))
+      } catch (error) {
+        console.log(error)
+      }
+    }
     fetchSearchEdges()
     // fetchIsochrone()
     // fetchTips()
   }, [targetPoints])
 
-  const handleMapClick = (event: LeafletMouseEvent) => {
+  const handleMapClick = (event: LeafletMouseEvent): void => {
     setTargetPoint([event.latlng.lat, event.latlng.lng])
   }
 
@@ -160,7 +160,11 @@ const ExplorerMap = (): ReactElement => {
           <Polyline positions={polyline.edges} key={polyline.id} color="red" />
         ))}
         {polylines.map(polyline => (
-          <Polyline positions={polyline.edges} key={polyline.id} weight={polyline.weight ? Math.log(polyline.weight) : 1}/>
+          <Polyline
+            positions={polyline.edges}
+            key={polyline.id}
+            weight={polyline.weight ? Math.log(polyline.weight) : 1}
+          />
         ))}
         {tips.map(tip => (
           <Marker position={tip.position} key={tip.id} />
