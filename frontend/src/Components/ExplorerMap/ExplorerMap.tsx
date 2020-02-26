@@ -27,7 +27,32 @@ type PolyLine = {
   edges: LatLng[]
   weight?: number
 }
-let progress = -1
+const progress = -1
+
+let maxWeight = -1
+let minWeight = -1
+
+const pixelWeight = (weight: number): number => {
+  return Math.round(Math.log(weight)) + 1
+}
+
+const setWeightRange = (nodes: NodeEdge[]) => {
+  nodes.forEach(node => {
+    if (node.weight && maxWeight === -1) {
+      maxWeight = node.weight
+      minWeight = node.weight
+      return
+    }
+    if (node.weight && node.weight > maxWeight) {
+      maxWeight = node.weight
+    }
+    if (node.weight && node.weight < minWeight) {
+      minWeight = node.weight
+    }
+  })
+  minWeight = pixelWeight(minWeight)
+  maxWeight = pixelWeight(maxWeight)
+}
 
 const getPolylineFromNodeEdge = (node: NodeEdge, id: number): PolyLine => {
   const from = new LatLng(node.from.x, node.from.y)
@@ -46,6 +71,33 @@ type IsochroneResponse = {
     }
   }[]
 }
+function getRandomColor() {
+  const letters = '0123456789ABCDEF'
+  let color = '#'
+  for (let i = 0; i < 6; i++) {
+    color += letters[Math.floor(Math.random() * 16)]
+  }
+  return color
+}
+const blues = [
+  '#fff7fb',
+  '#ece7f2',
+  '#d0d1e6',
+  '#a6bddb',
+  '#74a9cf',
+  '#3690c0',
+  '#0570b0',
+  '#045a8d',
+  '#023858',
+]
+
+const purplePalette = ['#e23e57', '#88304E', '#522546', '#311D3F']
+
+const getColorFromWeight = (weight: number) => {
+  return purplePalette[
+    Math.floor(((weight - minWeight) / (maxWeight - minWeight)) * purplePalette.length)
+  ]
+}
 
 const ExplorerMap = (): ReactElement => {
   const [targetPoints, setTargetPoint] = useState<null | number[]>(null)
@@ -61,52 +113,12 @@ const ExplorerMap = (): ReactElement => {
       'http://localhost:8989/tips?point=48.886038,2.358665&time_limit=300&reverse_flow=true',
     )
     const tipCoordinates: Coordinate[] = await response.json()
-    // setSearchBuffer(edges)
-    // setSearchBufferIndex(0)
     setTips(
       tipCoordinates.map((tipCoordinate, index) => ({
         position: new LatLng(tipCoordinate.x, tipCoordinate.y),
         id: index,
       })),
     )
-  }
-
-  const fetchIsochrone = async () => {
-    const response = await fetch(
-      'http://localhost:8989/isochrone?point=48.886038,2.358665&time_limit=300&buckets=1&reverse_flow=true',
-    )
-    const isochrone: IsochroneResponse = await response.json()
-    setIsochronePolylines(
-      isochrone.polygons.map((polygone, index) => {
-        return {
-          id: index,
-          edges: polygone.geometry.coordinates[0].map(coordinate => {
-            return new LatLng(
-              Math.round(coordinate[1] * 1000000) / 1000000,
-              Math.round(coordinate[0] * 1000000) / 1000000,
-            )
-          }),
-        }
-      }),
-    )
-  }
-
-  const drawFromBuffer = () => {
-    if (null === searchBufferIndex || searchBufferIndex >= searchBuffer.length) {
-      return
-    }
-
-    const currentProgress = Math.floor((searchBufferIndex / searchBuffer.length) * 100)
-
-    if (currentProgress > progress) {
-      console.log(`Progression : ${currentProgress} %`)
-      progress += 1
-    }
-
-    const newPolyline = getPolylineFromNodeEdge(searchBuffer[searchBufferIndex], searchBufferIndex)
-
-    setSearchBufferIndex(searchBufferIndex + 1)
-    setPolylines([...polylines, newPolyline])
   }
 
   useEffect(() => {
@@ -120,30 +132,60 @@ const ExplorerMap = (): ReactElement => {
         // eslint-disable-next-line
         time_limit: '600',
         // eslint-disable-next-line
-        reverse_flow: 'false',
-        vehicle: 'bike',
+        reverse_flow: 'true',
+        vehicle: 'car',
       }
-
       url.search = new URLSearchParams(params).toString()
+
       const response = await fetch(await url.toJSON())
       try {
         const edges: NodeEdge[] = await response.json()
+        setWeightRange(edges)
+        console.log('max-min', maxWeight, minWeight)
         setPolylines(edges.map(getPolylineFromNodeEdge))
       } catch (error) {
         console.log(error)
       }
     }
+    const fetchBassins = async () => {
+      if (!targetPoints) {
+        return
+      }
+      const url = new URL('http://localhost:8989/bassin-versant')
+      const params = {
+        point: `${targetPoints[0]},${targetPoints[1]}`,
+        // eslint-disable-next-line
+        time_limit: '1800',
+        // eslint-disable-next-line
+        reverse_flow: 'true',
+        vehicle: 'bike',
+      }
+      url.search = new URLSearchParams(params).toString()
+
+      const response = await fetch(await url.toJSON())
+      const isochrone: IsochroneResponse = await response.json()
+      setIsochronePolylines(
+        isochrone.polygons.map((polygone, index) => {
+          return {
+            id: index,
+            edges: polygone.geometry.coordinates[0].map(coordinate => {
+              return new LatLng(
+                Math.round(coordinate[1] * 1000000) / 1000000,
+                Math.round(coordinate[0] * 1000000) / 1000000,
+              )
+            }),
+          }
+        }),
+      )
+    }
+
     fetchSearchEdges()
-    // fetchIsochrone()
-    // fetchTips()
+    // fetchBassins()
   }, [targetPoints])
 
   const handleMapClick = (event: LeafletMouseEvent): void => {
     setTargetPoint([event.latlng.lat, event.latlng.lng])
   }
-
-  // useInterval(addRandomPoint, 100);
-  useInterval(drawFromBuffer, delay)
 
   return (
     <div className="map">
@@ -159,13 +201,19 @@ const ExplorerMap = (): ReactElement => {
         {isochronePolylines.map(polyline => (
           <Polyline positions={polyline.edges} key={polyline.id} color="red" />
         ))}
-        {polylines.map(polyline => (
-          <Polyline
-            positions={polyline.edges}
-            key={polyline.id}
-            weight={polyline.weight ? Math.log(polyline.weight) : 1}
-          />
-        ))}
+        {polylines.map(polyline => {
+          const weight = polyline.weight ? pixelWeight(polyline.weight) : null
+          const color = weight ? getColorFromWeight(weight) : 'black'
+
+          return (
+            <Polyline
+              positions={polyline.edges}
+              key={polyline.id}
+              color={color}
+              weight={weight || 1}
+            />
+          )
+        })}
         {tips.map(tip => (
           <Marker position={tip.position} key={tip.id} />
         ))}

@@ -12,7 +12,6 @@ import com.graphhopper.routing.QueryGraph;
 import com.graphhopper.routing.util.*;
 import com.graphhopper.routing.weighting.Weighting;
 import com.graphhopper.storage.Graph;
-import com.graphhopper.storage.SPTEntry;
 import com.graphhopper.storage.index.LocationIndex;
 import com.graphhopper.storage.index.QueryResult;
 import com.graphhopper.util.StopWatch;
@@ -29,16 +28,15 @@ import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
 import javax.ws.rs.core.UriInfo;
-import java.lang.reflect.Array;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 
-@Path("isochrone")
-public class IsochroneResource {
+@Path("bassin-versant")
+public class BassinVersantResource {
 
-    private static final Logger logger = LoggerFactory.getLogger(IsochroneResource.class);
+    private static final Logger logger = LoggerFactory.getLogger(BassinVersantResource.class);
 
     private final GraphHopper graphHopper;
     private final EncodingManager encodingManager;
@@ -46,7 +44,7 @@ public class IsochroneResource {
     private final GeometryFactory geometryFactory = new GeometryFactory();
 
     @Inject
-    public IsochroneResource(GraphHopper graphHopper, EncodingManager encodingManager, DelaunayTriangulationIsolineBuilder delaunayTriangulationIsolineBuilder) {
+    public BassinVersantResource(GraphHopper graphHopper, EncodingManager encodingManager, DelaunayTriangulationIsolineBuilder delaunayTriangulationIsolineBuilder) {
         this.graphHopper = graphHopper;
         this.encodingManager = encodingManager;
         this.delaunayTriangulationIsolineBuilder = delaunayTriangulationIsolineBuilder;
@@ -105,13 +103,15 @@ public class IsochroneResource {
         }
 
         if ("polygon".equalsIgnoreCase(resultStr)) {
-            List<List<Coordinate>> buckets = isochrone.searchGPS(qr.getClosestNode(), nBuckets);
+            List<List<Coordinate>> buckets = isochrone.searchBassinVersant(qr.getClosestNode(), nBuckets);
 
             if (isochrone.getVisitedNodes() > graphHopper.getMaxVisitedNodes() / 5) {
                 throw new IllegalArgumentException("Server side reset: too many junction nodes would have to explored (" + isochrone.getVisitedNodes() + "). Let us know if you need this increased.");
             }
 
             int counter = 0;
+            List<Coordinate[]> polygonShells = new ArrayList<>();
+
             for (List<Coordinate> bucket : buckets) {
                 if (bucket.size() < 2) {
                     throw new IllegalArgumentException("Too few points found for bucket " + counter + ". "
@@ -119,9 +119,14 @@ public class IsochroneResource {
                             + "And let us know if you think this is a bug!");
                 }
                 counter++;
+                List<List<Coordinate>> tempBuckets = new ArrayList<>();
+                tempBuckets.add(bucket);
+                polygonShells.addAll(delaunayTriangulationIsolineBuilder.calcList(tempBuckets, 1));
             }
             ArrayList<JsonFeature> features = new ArrayList<>();
-            List<Coordinate[]> polygonShells = delaunayTriangulationIsolineBuilder.calcList(buckets, buckets.size() - 1);
+            List<Coordinate[]> polygonShells1 = delaunayTriangulationIsolineBuilder.calcList(buckets, buckets.size() - 1);
+
+
             for (Coordinate[] polygonShell : polygonShells) {
                 JsonFeature feature = new JsonFeature();
                 HashMap<String, Object> properties = new HashMap<>();

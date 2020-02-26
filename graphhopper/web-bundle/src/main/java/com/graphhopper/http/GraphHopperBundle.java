@@ -291,6 +291,7 @@ public class GraphHopperBundle implements ConfiguredBundle<GraphHopperBundleConf
         environment.jersey().register(SPTResource.class);
         environment.jersey().register(TipPointsResource.class);
         environment.jersey().register(LowerchroneResource.class);
+        environment.jersey().register(BassinVersantResource.class);
         environment.jersey().register(NodeWeightResource.class);
         environment.jersey().register(I18NResource.class);
         environment.jersey().register(InfoResource.class);

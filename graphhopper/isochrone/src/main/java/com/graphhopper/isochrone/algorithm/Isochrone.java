@@ -31,6 +31,7 @@ import com.graphhopper.util.EdgeExplorer;
 import com.graphhopper.util.EdgeIterator;
 import com.graphhopper.util.shapes.GHPoint;
 import org.locationtech.jts.geom.Coordinate;
+import org.w3c.dom.html.HTMLBaseElement;
 
 import java.util.*;
 
@@ -63,7 +64,9 @@ public class Isochrone extends AbstractRoutingAlgorithm {
     }
 
     private IntObjectHashMap<IsoLabel> fromMap;
+    private IntObjectHashMap<IsoLabel> afterTipFromMap;
     private IntObjectHashMap<Integer> fromMapWeight;
+    private IntObjectHashMap<List<Coordinate>> bassinVersantBucketMap;
     private PriorityQueue<IsoLabel> fromHeap;
     private IsoLabel currEdge;
     private int visitedNodes;
@@ -71,15 +74,16 @@ public class Isochrone extends AbstractRoutingAlgorithm {
     private double finishLimit = -1;
     private ExploreType exploreType = TIME;
     private final boolean reverseFlow;
-    private List<IsoLabel> fromMapList;
+    private boolean haveTipsBeenAddedToMap = false;
 
     public Isochrone(Graph g, Weighting weighting, boolean reverseFlow) {
         super(g, weighting, TraversalMode.NODE_BASED);
         fromHeap = new PriorityQueue<>(1000);
         fromMap = new GHIntObjectHashMap<>(1000);
+        afterTipFromMap = new GHIntObjectHashMap<>(1000);
+        bassinVersantBucketMap = new GHIntObjectHashMap<>(1000);
         fromMapWeight = new GHIntObjectHashMap<>(1000);
         this.reverseFlow = reverseFlow;
-        fromMapList = new ArrayList<>();
     }
 
     @Override
@@ -239,6 +243,46 @@ public class Isochrone extends AbstractRoutingAlgorithm {
         return nodeEdgesCoordinates;
     }
 
+    public int getParentTipNode (SPTEntry node) {
+        if (bassinVersantBucketMap.get(node.adjNode) != null) {
+            return node.adjNode;
+        }
+        if (node.parent != null) {
+            return getParentTipNode(node.parent);
+        }
+        return -1;
+    }
+
+    public List<List<Coordinate>> searchBassinVersant(int from, final int bucketCount) {
+        searchInternal(from);
+
+        final List<List<Coordinate>> buckets = new ArrayList<>(bucketCount);
+
+        final NodeAccess na = graph.getNodeAccess();
+
+        afterTipFromMap.forEach(new IntObjectProcedure<IsoLabel>() {
+            @Override
+            public void apply(int nodeId, IsoLabel label) {
+                int parentTipNode = getParentTipNode(label);
+                if (-1 != parentTipNode) {
+                    bassinVersantBucketMap.get(parentTipNode).add(
+                            new Coordinate(na.getLongitude(label.adjNode), na.getLatitude(label.adjNode))
+                    );
+                }
+            }
+        });
+
+        bassinVersantBucketMap.forEach(new IntObjectProcedure<List<Coordinate>>() {
+            public void apply(int nodeId, List<Coordinate> bucket) {
+                if (bucket.size() > 1){
+                    buckets.add(bucket);
+                }
+            }
+        });
+
+        return buckets;
+    }
+
     public List<List<Coordinate>> searchGPS(int from, final int bucketCount) {
         searchInternal(from);
 
@@ -320,6 +364,14 @@ public class Isochrone extends AbstractRoutingAlgorithm {
                 break;
             }
 
+            if (tipsReached() && !haveTipsBeenAddedToMap) {
+                bassinVersantBucketMap.put(currEdge.adjNode, new ArrayList<Coordinate>());
+                for (IsoLabel tip: fromHeap){
+                    bassinVersantBucketMap.put(tip.adjNode, new ArrayList<Coordinate>());
+                }
+                haveTipsBeenAddedToMap = true;
+            }
+
             int neighborNode = currEdge.adjNode;
             EdgeIterator iter = explorer.setBaseNode(neighborNode);
             while (iter.next()) {
@@ -340,7 +392,9 @@ public class Isochrone extends AbstractRoutingAlgorithm {
                     nEdge.parent = currEdge;
                     fromMap.put(tmpNode, nEdge);
                     fromHeap.add(nEdge);
-                    fromMapList.add(nEdge);
+                    if (haveTipsBeenAddedToMap){
+                        afterTipFromMap.put(tmpNode, nEdge);
+                    }
                 } else if (nEdge.weight > tmpWeight) {
                     fromHeap.remove(nEdge);
                     nEdge.edge = iter.getEdge();
@@ -373,6 +427,10 @@ public class Isochrone extends AbstractRoutingAlgorithm {
     @Override
     protected boolean finished() {
         return getExploreValue(currEdge) >= finishLimit;
+    }
+
+    protected boolean tipsReached() {
+        return getExploreValue(currEdge) >= finishLimit / 2;
     }
 
     @Override
