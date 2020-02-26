@@ -79,24 +79,10 @@ function getRandomColor() {
   }
   return color
 }
-const blues = [
-  '#fff7fb',
-  '#ece7f2',
-  '#d0d1e6',
-  '#a6bddb',
-  '#74a9cf',
-  '#3690c0',
-  '#0570b0',
-  '#045a8d',
-  '#023858',
-]
-
-const purplePalette = ['#e23e57', '#88304E', '#522546', '#311D3F']
+const blues = ['#fd8d3c', '#f16913', '#d94801', '#a63603', '#7f2704']
 
 const getColorFromWeight = (weight: number) => {
-  return purplePalette[
-    Math.floor(((weight - minWeight) / (maxWeight - minWeight)) * purplePalette.length)
-  ]
+  return blues[Math.floor(((weight - minWeight) / (maxWeight - minWeight)) * blues.length)]
 }
 
 const ExplorerMap = (): ReactElement => {
@@ -186,6 +172,17 @@ const ExplorerMap = (): ReactElement => {
   const handleMapClick = (event: LeafletMouseEvent): void => {
     setTargetPoint([event.latlng.lat, event.latlng.lng])
   }
+  const myFilter = [
+    'blur:0px',
+    'brightness:95%',
+    'contrast:130%',
+    'grayscale:20%',
+    'hue:290deg',
+    'opacity:100%',
+    'invert:100%',
+    'saturate:300%',
+    'sepia:10%',
+  ]
 
   return (
     <div className="map">
@@ -193,10 +190,11 @@ const ExplorerMap = (): ReactElement => {
         <button onClick={() => setDelay(null)}>Pause</button>
         <button onClick={() => setDelay(100)}>Play</button>
       </div>
-      <Map center={[48.886038, 2.358665]} zoom={14} onClick={handleMapClick}>
+      <Map center={[48.886038, 2.358665]} zoom={12} onClick={handleMapClick}>
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
+          filter={myFilter}
         />
         {isochronePolylines.map(polyline => (
           <Polyline positions={polyline.edges} key={polyline.id} color="red" />
