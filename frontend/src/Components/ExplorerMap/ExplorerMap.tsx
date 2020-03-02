@@ -51,7 +51,7 @@ const setWeightRange = (nodes: NodeEdge[]) => {
     }
   })
   minWeight = pixelWeight(minWeight)
-  maxWeight = pixelWeight(maxWeight)
+  maxWeight = pixelWeight(maxWeight) + 1
 }
 
 const getPolylineFromNodeEdge = (node: NodeEdge, id: number): PolyLine => {
@@ -79,13 +79,16 @@ function getRandomColor() {
   }
   return color
 }
-const blues = ['#fd8d3c', '#f16913', '#d94801', '#a63603', '#7f2704']
+const blues = ['#e14594', '#7045af', '#2b3595', '#182952']
 
 const getColorFromWeight = (weight: number) => {
-  return blues[Math.floor(((weight - minWeight) / (maxWeight - minWeight)) * blues.length)]
+  return blues.reverse()[
+    Math.floor(((weight - minWeight) / (maxWeight - minWeight)) * blues.length)
+  ]
 }
 
 const ExplorerMap = (): ReactElement => {
+  const [travelTime, setTravelTime] = useState(600)
   const [targetPoints, setTargetPoint] = useState<null | number[]>(null)
   const [isochronePolylines, setIsochronePolylines] = useState<PolyLine[]>([])
   const [polylines, setPolylines] = useState<PolyLine[]>([])
@@ -116,10 +119,10 @@ const ExplorerMap = (): ReactElement => {
       const params = {
         point: `${targetPoints[0]},${targetPoints[1]}`,
         // eslint-disable-next-line
-        time_limit: '600',
+        time_limit: travelTime.toString(),
         // eslint-disable-next-line
         reverse_flow: 'true',
-        vehicle: 'car',
+        vehicle: 'bike',
       }
       url.search = new URLSearchParams(params).toString()
 
@@ -128,7 +131,7 @@ const ExplorerMap = (): ReactElement => {
         const edges: NodeEdge[] = await response.json()
         setWeightRange(edges)
         console.log('max-min', maxWeight, minWeight)
-        setPolylines(edges.map(getPolylineFromNodeEdge))
+        setPolylines(polylines => [...polylines, ...edges.map(getPolylineFromNodeEdge)])
       } catch (error) {
         console.log(error)
       }
@@ -167,48 +170,48 @@ const ExplorerMap = (): ReactElement => {
 
     fetchSearchEdges()
     // fetchBassins()
+    // eslint-disable-next-line
   }, [targetPoints])
 
   const handleMapClick = (event: LeafletMouseEvent): void => {
     setTargetPoint([event.latlng.lat, event.latlng.lng])
   }
-  const myFilter = [
-    'blur:0px',
-    'brightness:95%',
-    'contrast:130%',
-    'grayscale:20%',
-    'hue:290deg',
-    'opacity:100%',
-    'invert:100%',
-    'saturate:300%',
-    'sepia:10%',
-  ]
+
+  const handleTimeChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
+    setTravelTime(parseInt(event.target.value))
+  }
 
   return (
     <div className="map">
-      <div>
-        <button onClick={() => setDelay(null)}>Pause</button>
-        <button onClick={() => setDelay(100)}>Play</button>
+      <div className="settings">
+        <div>Temps en secondes</div>
+        <input
+          type="number"
+          onChange={handleTimeChange}
+          value={travelTime}
+          placeholder="temps en secondes"
+        />
+        <button onClick={() => setPolylines([])}>Reset</button>
       </div>
       <Map center={[48.886038, 2.358665]} zoom={12} onClick={handleMapClick}>
         <TileLayer
           url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="http://osm.org/copyright">OpenStreetMap</a> contributors'
-          filter={myFilter}
+          opacity={0.9}
         />
         {isochronePolylines.map(polyline => (
           <Polyline positions={polyline.edges} key={polyline.id} color="red" />
         ))}
         {polylines.map(polyline => {
-          const weight = polyline.weight ? pixelWeight(polyline.weight) : null
+          const weight = polyline.weight ? pixelWeight(polyline.weight) : 1
           const color = weight ? getColorFromWeight(weight) : 'black'
 
           return (
             <Polyline
               positions={polyline.edges}
               key={polyline.id}
+              weight={weight * 2}
               color={color}
-              weight={weight || 1}
             />
           )
         })}
